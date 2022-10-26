@@ -2,7 +2,6 @@ import { db } from "../db.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
-
 // CONTROL AUTHENTICATION PARA REGISTER
 export const register = (req, res) => {
   //CHECK EXISTING USER
@@ -27,57 +26,35 @@ export const register = (req, res) => {
 };
 
 // CONTROL AUTHENTICATION PARA PAG LOGIN
-export const login = async (req, res) => {
-  try {
-    const user = await User.findOne({
-      where: {
-        email: req.body.email,
-      },
-    });
-    if (!user) {
-      return res.status(404).send({ status: "failed", message: "User Not found." });
-    }
-    const passwordIsValid = bcrypt.compareSync(
+export const login = (req, res) => {
+  //CHECK USER
+
+  const q = "SELECT * FROM users WHERE username = ?";
+
+  db.query(q, [req.body.username], (err, data) => {
+    if (err) return res.status(500).json(err);
+    if (data.length === 0) return res.status(404).json("User not found!");
+
+    //Check password
+    const isPasswordCorrect = bcrypt.compareSync(
       req.body.password,
-      user.password
+      data[0].password
     );
-    
-    if (!passwordIsValid) {
-      return res.status(401).send({
-        status: "failed",
-        message: "Invalid Password!",
-      });
-    }
-    const token = jwt.sign({ id: user.id }, config.secret, {
-      expiresIn: 86400, // 24 hours
-    });
 
-    let refreshToken = await RefreshToken.createToken(user);
+    if (!isPasswordCorrect)
+      // return res.status(400).json("Wrong username or password!");
+      return res.status(200).json("Login Success!");
 
-    let authorities = [];
-    const roles = await user.getRoles();
-    for (let i = 0; i < roles.length; i++) {
-      authorities.push("ROLE_" + roles[i].name.toUpperCase());
-    }
+    // const token = jwt.sign({ id: data[0].id }, "jwtkey");
+    // const { password, ...other } = data[0];
 
-    req.session.token = token;
-      return res.status(200).send({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        role: authorities,
-        accessToken: token,
-        refreshToken: refreshToken,
-        // userIp: getUserIp,
-        // userIPs: ip.address(),
-        // expiryDate: config.jwtExpiration,
-    });
-
-  } catch (error) {
-    return res.status(500).send({ message: error.message });
-  }
-  console.log(Success);
+    res
+      .cookie("access_token", token, {
+        httpOnly: true,
+      })
+      .status(200)
+      .json(other);
+  });
 };
 
 export const logout = (req, res) => {
